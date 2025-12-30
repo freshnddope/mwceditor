@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="mwceditor/mwceditor.vcxproj" Id="c3b822f4-63d2-4ce1-9851-c765aba905f0" />
+</Solution>
