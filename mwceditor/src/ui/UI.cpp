@@ -1,4 +1,5 @@
 #include "UI.h"
+#include "UIUtils.h"
 #include "imgui.h"
 #include <algorithm>
 #include <Windows.h>
@@ -23,7 +24,14 @@ namespace UI {
     static std::vector<Document> documents;
     static std::string globalStatus = "Ready";
     static int activeTabIndex = -1;
+    static bool forceTabSelection = false;
     static bool showToolsWindow = false;
+    static bool showHelpWindow = false;
+    static State globalState;
+
+    State& GetState() {
+        return globalState;
+    }
 
     int FindDocumentByPath(const std::string& path) {
         for (size_t i = 0; i < documents.size(); ++i)
@@ -128,9 +136,8 @@ namespace UI {
                          else if (numFloats == 7) {
                              changed |= ImGui::DragFloat3("Pos", vec.data(), 0.1f);
                              changed |= ImGui::DragFloat4("Rot", vec.data() + 3, 0.01f);
-                         } else {
+                         } else
                              ImGui::Text("Raw Floats [%d]", numFloats);
-                         }
 
                          if (changed)
                               memcpy(buffer.data(), vec.data(), buffer.size());
@@ -157,65 +164,90 @@ namespace UI {
     }
 
     void RenderToolsWindow() {
-        if (!showToolsWindow) return;
-        
-        ImGui::Begin("Tools Window", &showToolsWindow);
-        
-        Document* saveFileDoc = nullptr;
-        for (auto& doc : documents) {
-            std::string lowerName = doc.name;
-            std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
-            if (lowerName == "savefile.txt") {
-                saveFileDoc = &doc;
-                break;
-            }
-        }
+        if (!showToolsWindow)
+            return;
 
-        if (!saveFileDoc) {
-            ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "Save Game before opening tools window.");
-            ImGui::TextDisabled("(File 'savefile.txt' is not loaded)");
+        Document* doc = GetActiveDocument();
+        if (!doc)
+            return;
+
+        if (!ImGui::Begin("Tools", &showToolsWindow)) {
             ImGui::End();
             return;
         }
 
-        auto EditVar = [&](const char* label, const char* key, float minVal = -FLT_MAX, float maxVal = FLT_MAX) {
-            auto* var = saveFileDoc->file.GetVariable(key);
-            if (!var) {
-                ImGui::TextDisabled("%s: Not found in save", label);
-                return;
-            }
-
-            if (var->header.valueType == SaveSystem::EntryValue::Float) {
-                float val = 0.0f;
-                if (var->value.size() >= 4) val = *reinterpret_cast<const float*>(var->value.data());
-                if (ImGui::DragFloat(label, &val, 1.0f, minVal, maxVal)) {
-                    if (var->value.size() < 4) var->value.resize(4);
-                    memcpy(var->value.data(), &val, 4);
-                }
-            } else if (var->header.valueType == SaveSystem::EntryValue::Integer) {
-                int val = 0;
-                if (var->value.size() >= 4) val = *reinterpret_cast<const int*>(var->value.data());
-                if (ImGui::DragInt(label, &val, 1, (int)minVal, (int)maxVal)) {
-                    if (var->value.size() < 4) var->value.resize(4);
-                    memcpy(var->value.data(), &val, 4);
-                }
-            }
-        };
-
         if (ImGui::CollapsingHeader("Player", ImGuiTreeNodeFlags_DefaultOpen)) {
-            EditVar("Set Player Money", "PlayerMoney", 0.0f);
-            EditVar("Set Player Bank Money", "PlayerMoneyBank", 0.0f);
-            EditVar("Set Cigaretes", "PlayerCigarettes", 0.0f, 20.0f);
+            EditFloatVar(doc, "Set Player Money", "PlayerMoney");
+            EditFloatVar(doc, "Set Player Bank Money", "PlayerMoneyBank");
+            EditIntVar(doc, "Set Cigarettes", "PlayerCigarettes", 0, 20);
+            EditBoolVar(doc, "Player Tattoo", "PlayerTattoo");
         }
 
+        ImGui::Separator();
+
         if (ImGui::CollapsingHeader("Misc", ImGuiTreeNodeFlags_DefaultOpen)) {
-            EditVar("Set Fuel Oil Price", "FuelPriceFuelOil", 0.0f);
-            EditVar("Set Fuel Diesel Price", "FuelPriceDiesel", 0.0f);
-            EditVar("Set Fuel Gasoline Price", "FuelPriceGasoline", 0.0f);
+            EditFloatVar(doc, "Fuel Oil Price", "FuelPriceFuelOil");
+            EditFloatVar(doc, "Fuel Diesel Price", "FuelPriceDiesel");
+            EditFloatVar(doc, "Fuel Gasoline Price", "FuelPriceGasoline");
+
+            ImGui::Separator();
+
+            if (ImGui::CollapsingHeader("Keys")) {
+                EditIntAsBool(doc, "Satsuma Key", "KeySatsuma");
+                EditIntAsBool(doc, "Home Key", "KeyHome");
+                EditIntAsBool(doc, "Ferndale Key", "KeyFerndale");
+                EditBoolVar(doc, "Gifu Available", "GifuAvailable");
+            }
         }
 
         ImGui::End();
     }
+
+    void RenderHelpWindow() {
+        if (!showHelpWindow) return;
+
+        ImGui::Begin("Help", &showHelpWindow, ImGuiWindowFlags_AlwaysAutoResize);
+
+        ImGui::TextWrapped("Welcome to the MWC Save Editor!");
+        ImGui::Separator();
+
+        if (ImGui::CollapsingHeader("How to open save file", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::BulletText("Go to File -> Open Save...");
+            ImGui::BulletText("Select your save file from the game directory");
+            ImGui::BulletText("The file will open in a new tab");
+        }
+
+        if (ImGui::CollapsingHeader("Editing values")) {
+            ImGui::BulletText("Use search bar to find variables quickly");
+            ImGui::BulletText("Click on values to edit them");
+            ImGui::BulletText("Changes are applied instantly in memory");
+            ImGui::BulletText("Remember to save the file!");
+        }
+
+        if (ImGui::CollapsingHeader("Containers (List / Dictionary)")) {
+            ImGui::BulletText("Lists and dictionaries can be expanded");
+            ImGui::BulletText("Use '+' button to add new entries");
+            ImGui::BulletText("Use 'x' button to remove entries");
+        }
+
+        if (ImGui::CollapsingHeader("Restore points")) {
+            ImGui::BulletText("Create restore points from Restore menu");
+            ImGui::BulletText("All save files are backed up");
+            ImGui::BulletText("You can restore previous state anytime");
+        }
+
+        if (ImGui::CollapsingHeader("Tools Window")) {
+            ImGui::BulletText("Tools window allows quick edits");
+            ImGui::BulletText("Requires savefile.txt to be loaded");
+            ImGui::BulletText("Useful for money, fuel prices, etc.");
+        }
+
+        ImGui::Separator();
+        ImGui::TextDisabled("MWC Editor by polaris");
+
+        ImGui::End();
+    }
+
 
     void Render() {
         static bool opt_fullscreen = true;
@@ -272,6 +304,7 @@ namespace UI {
                          if (existingIdx >= 0) {
                              globalStatus = "File already open, switching to tab: " + documents[existingIdx].name;
                              activeTabIndex = existingIdx;
+                             forceTabSelection = true;
                          } else {
                              Document newDoc;
                              newDoc.filepath = filename;
@@ -281,10 +314,10 @@ namespace UI {
                              if (newDoc.file.Load(filename)) {
                                  globalStatus = "Loaded: " + newDoc.name;
                                  documents.push_back(newDoc);
-                                 activeTabIndex = documents.size() - 1;
-                             } else {
+                                 activeTabIndex = (int)documents.size() - 1;
+                                 forceTabSelection = true;
+                             } else
                                  globalStatus = "Error: " + newDoc.file.error;
-                             }
                          }
                      }
                 }
@@ -322,8 +355,29 @@ namespace UI {
             }
 
             if (ImGui::BeginMenu("Tools")) {
-                if (ImGui::MenuItem("Open Tools Window"))
+                if (ImGui::MenuItem("Open Tools Window")) {
                     showToolsWindow = true;
+                    
+                    char savefilePath[MAX_PATH] = "";
+                    if (GetEnvironmentVariableA("USERPROFILE", savefilePath, MAX_PATH)) {
+                        strcat_s(savefilePath, "\\AppData\\LocalLow\\Amistech\\My Winter Car\\savefile.txt");
+                        int existingIdx = FindDocumentByPath(savefilePath);
+                        if (existingIdx >= 0) {
+                            activeTabIndex = existingIdx;
+                            forceTabSelection = true;
+                        } else if (std::filesystem::exists(savefilePath)) {
+                            Document newDoc;
+                            newDoc.filepath = savefilePath;
+                            newDoc.name = "savefile.txt";
+                            if (newDoc.file.Load(savefilePath)) {
+                                documents.push_back(newDoc);
+                                activeTabIndex = (int)documents.size() - 1;
+                                forceTabSelection = true;
+                                globalStatus = "Automatically loaded savefile.txt";
+                            }
+                        }
+                    }
+                }
                 ImGui::EndMenu();
             }
             
@@ -402,33 +456,36 @@ namespace UI {
                          }
                          
                          if (count == 0) ImGui::TextDisabled("(No restore points)");
-                    } else {
+                    } else
                          ImGui::TextDisabled("No backup folder found");
-                    }
                     ImGui::EndMenu();
                 }
                 
                 ImGui::EndMenu();
             }
-            
+
+            if (ImGui::BeginMenu("Help")) {
+                if (ImGui::MenuItem("Open Help Window"))
+                    showHelpWindow = true;
+                ImGui::EndMenu();
+            }
+
             ImGui::EndMenuBar();
         }
 
         ImGui::Begin("Editor", nullptr);
         
-        if (documents.empty()) {
+        if (documents.empty())
             ImGui::TextDisabled("No file loaded. File -> Open Save...");
-        } else {
+        else {
             if (ImGui::BeginTabBar("FileTabs", ImGuiTabBarFlags_Reorderable | ImGuiTabBarFlags_FittingPolicyScroll)) {
                 for (int i = 0; i < documents.size();) {
                     auto& doc = documents[i];
                     bool keepOpen = true;
                     
                     ImGuiTabItemFlags flags = ImGuiTabItemFlags_None;
-                    if (activeTabIndex == i) {
+                    if (forceTabSelection && activeTabIndex == i)
                         flags |= ImGuiTabItemFlags_SetSelected;
-                        activeTabIndex = -1;
-                    }
                     
                     if (ImGui::BeginTabItem(doc.name.c_str(), &keepOpen, flags)) {
                         activeTabIndex = i;
@@ -442,9 +499,9 @@ namespace UI {
                         ImGui::Text("|");
                         ImGui::SameLine();
                         
-                        if (!doc.file.isLoaded) {
+                        if (!doc.file.isLoaded)
                             ImGui::TextColored(ImVec4(1,0,0,1), "File not loaded");
-                        } else {
+                        else {
                             ImGui::InputTextWithHint("##Search", "Search...", doc.state.searchBuffer, IM_ARRAYSIZE(doc.state.searchBuffer));
                             ImGui::SameLine();
                             ImGui::Text("Items: %zu", doc.file.variables.size());
@@ -462,9 +519,9 @@ namespace UI {
                                 std::vector<size_t> filteredIndices;
                                 filteredIndices.reserve(doc.file.variables.size());
                                 for (size_t j = 0; j < doc.file.variables.size(); ++j) {
-                                     if (search.empty()) {
+                                     if (search.empty())
                                          filteredIndices.push_back(j);
-                                     } else {
+                                     else {
                                          std::string keyLower = doc.file.variables[j].key;
                                          std::transform(keyLower.begin(), keyLower.end(), keyLower.begin(), ::tolower);
                                          if (keyLower.find(search) != std::string::npos)
@@ -582,35 +639,52 @@ namespace UI {
                         i++;
                 }
                 ImGui::EndTabBar();
+                forceTabSelection = false;
             }
         }
         
         ImGui::End();
 
         RenderToolsWindow();
-
-        ImVec2 textSize = ImGui::CalcTextSize(globalStatus.c_str());
-        float statusWidth = textSize.x + 20.0f;
-        if (statusWidth < 200.0f) statusWidth = 200.0f;
+        RenderHelpWindow();
 
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImVec2 workPos = viewport->WorkPos;
         ImVec2 workSize = viewport->WorkSize;
-        
         float padding = 10.0f;
         float windowHeight = 30.0f;
-        
-        ImVec2 pos;
-        pos.x = workPos.x + workSize.x - statusWidth - padding;
-        pos.y = workPos.y + workSize.y - windowHeight - padding;
 
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Always); 
-        ImGui::SetNextWindowSize(ImVec2(statusWidth, windowHeight));
+        const char* githubLabel = "MWC Editor @ github.com/freshnddope/mwceditor";
+        float githubWidth = ImGui::CalcTextSize(githubLabel).x + 20.0f;
         
-        ImGui::Begin("Status", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoDecoration);
+        float statusWidth = ImGui::CalcTextSize(globalStatus.c_str()).x + 20.0f;
+        if (statusWidth < 150.0f) statusWidth = 150.0f;
+
+        ImVec2 statusPos;
+        statusPos.x = workPos.x + workSize.x - statusWidth - padding;
+        statusPos.y = workPos.y + workSize.y - windowHeight - padding;
+
+        ImVec2 githubPos;
+        githubPos.x = statusPos.x - githubWidth - padding;
+        githubPos.y = statusPos.y;
+
         float time = (float)ImGui::GetTime();
         float alpha = (sinf(time * 2.0f) * 0.5f + 0.5f) * 0.5f + 0.5f;
-        ImGui::TextColored(ImVec4(0.33f, 0.67f, 0.86f, alpha), "%s", globalStatus.c_str());
+
+        ImGui::SetNextWindowPos(githubPos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(githubWidth, windowHeight));
+        ImGui::Begin("GithubOverlay", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoDecoration);
+        ImGui::SetCursorPosY((windowHeight - ImGui::GetTextLineHeight()) * 0.5f);
+        ImGui::SetCursorPosX(10.0f);
+        ImGui::TextColored(ImVec4(0.33f, 0.67f, 0.86f, alpha), "%s", githubLabel);
+        ImGui::End();
+
+        ImGui::SetNextWindowPos(statusPos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(statusWidth, windowHeight));
+        ImGui::Begin("StatusOverlay", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoDecoration);
+        ImGui::SetCursorPosY((windowHeight - ImGui::GetTextLineHeight()) * 0.5f);
+        ImGui::SetCursorPosX(10.0f);
+        ImGui::TextUnformatted(globalStatus.c_str());
         ImGui::End();
         
         ImGui::End();

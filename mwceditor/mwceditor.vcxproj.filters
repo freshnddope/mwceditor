@@ -30,6 +30,9 @@
     <ClCompile Include="src\ui\UI.cpp">
       <Filter>UI</Filter>
     </ClCompile>
+    <ClCompile Include="src\ui\UIUtils.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
     <ClCompile Include="dependencies\imgui\imgui.cpp">
       <Filter>Vendor\ImGui</Filter>
     </ClCompile>
@@ -54,6 +57,9 @@
       <Filter>System</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\UI.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\UIUtils.h">
       <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="dependencies\imgui\imgui.h">

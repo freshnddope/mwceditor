@@ -144,6 +144,7 @@
     <ClCompile Include="src\core\main.cpp" />
     <ClCompile Include="src\system\SaveSystem.cpp" />
     <ClCompile Include="src\ui\UI.cpp" />
+    <ClCompile Include="src\ui\UIUtils.cpp" />
     <ClCompile Include="dependencies\imgui\imgui.cpp" />
     <ClCompile Include="dependencies\imgui\imgui_draw.cpp" />
     <ClCompile Include="dependencies\imgui\imgui_tables.cpp" />
@@ -154,6 +155,7 @@
   <ItemGroup>
     <ClInclude Include="src\system\SaveSystem.h" />
     <ClInclude Include="src\ui\UI.h" />
+    <ClInclude Include="src\ui\UIUtils.h" />
     <ClInclude Include="dependencies\imgui\imgui.h" />
     <ClInclude Include="dependencies\imgui\backends\imgui_impl_win32.h" />
     <ClInclude Include="dependencies\imgui\backends\imgui_impl_dx11.h" />

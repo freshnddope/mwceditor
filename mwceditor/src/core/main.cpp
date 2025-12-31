@@ -23,7 +23,10 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"MWCEditor", nullptr };
     ::RegisterClassExW(&wc);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"My Winter Car Editor [1.0.0] @ https://www.nexusmods.com/profile/polaristoja", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
+    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"MWCEditor", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
+    
+    std::wstring title = L"My Winter Car Editor [" + std::wstring(UI::GetState().currentVersion.begin(), UI::GetState().currentVersion.end()) + L"] @ nexusmods.com/profile/polaristoja/mods";
+    ::SetWindowTextW(hwnd, title.c_str());
 
     if (!CreateDeviceD3D(hwnd)) {
         CleanupDeviceD3D();
